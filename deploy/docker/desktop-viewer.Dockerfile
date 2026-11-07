@@ -12,6 +12,9 @@ COPY ["apps/DESKTOP VIEWER/package.json", "apps/DESKTOP VIEWER/package-lock.json
 WORKDIR "/app/DESKTOP VIEWER"
 RUN npm ci --no-audit --no-fund
 COPY ["apps/DESKTOP VIEWER", "/app/DESKTOP VIEWER"]
+# vite.config.ts meng-import ../tools/runtime/cacheStore.mjs -> /app/tools wajib ada
+COPY ["tools", "/app/tools"]
+COPY ["scripts", "/app/scripts"]
 RUN npm run build
 
 FROM node:20-bookworm-slim
