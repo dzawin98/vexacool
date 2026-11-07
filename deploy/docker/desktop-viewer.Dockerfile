@@ -8,10 +8,10 @@
 
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
-COPY "apps/DESKTOP VIEWER/package.json" "apps/DESKTOP VIEWER/package-lock.json" "./DESKTOP VIEWER/"
+COPY ["apps/DESKTOP VIEWER/package.json", "apps/DESKTOP VIEWER/package-lock.json", "./DESKTOP VIEWER/"]
 WORKDIR "/app/DESKTOP VIEWER"
 RUN npm ci --no-audit --no-fund
-COPY "apps/DESKTOP VIEWER" "/app/DESKTOP VIEWER"
+COPY ["apps/DESKTOP VIEWER", "/app/DESKTOP VIEWER"]
 RUN npm run build
 
 FROM node:20-bookworm-slim
@@ -21,7 +21,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 # Python untuk decode JPEG2000 / HTJ2K & DICOM print (server-side)
-COPY "apps/DESKTOP VIEWER SSR/server/requirements.txt" /tmp/req.txt
+COPY ["apps/DESKTOP VIEWER SSR/server/requirements.txt", "/tmp/req.txt"]
 RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/req.txt \
  && pip3 install --no-cache-dir --break-system-packages pylibjpeg-openjpeg imagecodecs \
  && rm -f /tmp/req.txt
@@ -29,15 +29,15 @@ RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/req.txt \
 WORKDIR /app
 
 # Dependensi runtime SSR
-COPY "apps/DESKTOP VIEWER SSR/package.json" "apps/DESKTOP VIEWER SSR/package-lock.json" "./DESKTOP VIEWER SSR/"
+COPY ["apps/DESKTOP VIEWER SSR/package.json", "apps/DESKTOP VIEWER SSR/package-lock.json", "./DESKTOP VIEWER SSR/"]
 WORKDIR "/app/DESKTOP VIEWER SSR"
 RUN npm ci --omit=dev --no-audit --no-fund
 
 WORKDIR /app
-COPY "apps/DESKTOP VIEWER SSR" "/app/DESKTOP VIEWER SSR"
-COPY scripts /app/scripts
-COPY tools /app/tools
-COPY --from=build "/app/DESKTOP VIEWER/dist" "/app/DESKTOP VIEWER/dist"
+COPY ["apps/DESKTOP VIEWER SSR", "/app/DESKTOP VIEWER SSR"]
+COPY ["scripts", "/app/scripts"]
+COPY ["tools", "/app/tools"]
+COPY --from=build ["/app/DESKTOP VIEWER/dist", "/app/DESKTOP VIEWER/dist"]
 
 ENV NODE_ENV=production \
     PORT=5994 \

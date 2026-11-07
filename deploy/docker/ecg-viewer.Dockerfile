@@ -7,12 +7,12 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR "/app/ECG VIEWER"
-COPY "apps/ECG VIEWER/package.json" "apps/ECG VIEWER/package-lock.json" ./
+COPY ["apps/ECG VIEWER/package.json", "apps/ECG VIEWER/package-lock.json", "./"]
 RUN npm ci --omit=dev --no-audit --no-fund
 
 WORKDIR /app
-COPY "apps/ECG VIEWER" "/app/ECG VIEWER"
-COPY scripts /app/scripts
+COPY ["apps/ECG VIEWER", "/app/ECG VIEWER"]
+COPY ["scripts", "/app/scripts"]
 
 WORKDIR "/app/ECG VIEWER"
 ENV NODE_ENV=production ECG_VIEWER_PORT=7771
