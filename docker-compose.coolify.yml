@@ -8,7 +8,11 @@
 #   /viewer/*    -> Desktop viewer SSR 5994  (prefix TIDAK di-strip)
 #   /mobile/*    -> Mobile viewer 5992       (prefix TIDAK di-strip)
 #
-# Data persisten hanya lewat ${VEXA_DATA_ROOT} (lihat COOLIFY.md).
+# Data persisten = bind mount ABSOLUT ke /data/vexa/* (lihat COOLIFY.md).
+# Sengaja tidak memakai ${VEXA_DATA_ROOT}: Coolify tidak meng-interpolasi variabel
+# di volume, sehingga path relatif berubah jadi named volume dan data tidak lagi
+# ada di disk yang bisa kamu besarkan. Ganti 5 baris /data/vexa di bawah kalau
+# pindah disk/NAS.
 # Jangan mengubah path DI DALAM container (DICOM_STORAGE_PATH=/data/dicom);
 # kalau butuh lebih besar, yang diganti adalah disk/mount di host.
 
@@ -47,13 +51,40 @@ services:
       POSTGRES_DB: vexaris_db
       TZ: ${TZ:-Asia/Jakarta}
     volumes:
-      - ${VEXA_DATA_ROOT}/postgres:/var/lib/postgresql/data
+      - /data/vexa/postgres:/var/lib/postgresql/data
       - ./deploy/coolify/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d vexaris_db"]
       interval: 10s
       timeout: 5s
       retries: 12
+    networks: [vexa]
+
+  # Pastikan DB kedua ada. Skrip /docker-entrypoint-initdb.d HANYA jalan saat
+  # volume postgres masih kosong; pada deploy ulang volume sudah ada sehingga
+  # velopacs_db tidak pernah dibuat -> PACS 500 'database does not exist'.
+  db-init:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGPASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      PGHOST: postgres
+      PGUSER: postgres
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        for db in vexaris_db velopacs_db; do
+          exists=$(psql -tAc "SELECT 1 FROM pg_database WHERE datname='$$db'")
+          if [ "$$exists" != "1" ]; then
+            echo "creating database $$db"
+            createdb "$$db"
+          else
+            echo "database $$db already exists"
+          fi
+        done
+    depends_on:
+      postgres: { condition: service_healthy }
     networks: [vexa]
 
   # ---------------------------------------------------------------------- PACS
@@ -82,9 +113,9 @@ services:
       DICOMWEB_HTTP_COMPRESS: "true"
       DICOM_TRAFFIC_INTERNAL_KEY: ${SERVICE_PASSWORD_TRAFFICKEY}
     volumes:
-      - ${VEXA_DATA_ROOT}/dicom:/data/dicom
-      - ${VEXA_DATA_ROOT}/frame-cache:/data/frame-cache
-      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
+      - /data/vexa/dicom:/data/dicom
+      - /data/vexa/frame-cache:/data/frame-cache
+      - /data/vexa/programdata:/data/programdata
     ports:
       # DIMSE C-STORE untuk modalitas — TCP mentah, tidak bisa lewat reverse proxy
       - "${PACS_DIMSE_PORT:-5757}:5757"
@@ -115,7 +146,7 @@ services:
       MWL_SCP_PORT: "5656"
       MWL_SCP_INTERNAL_KEY: ${SERVICE_PASSWORD_MWLKEY}
     volumes:
-      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
+      - /data/vexa/programdata:/data/programdata
     ports:
       - "${MWL_SCP_PORT:-5656}:5656"
     depends_on:
@@ -153,9 +184,9 @@ services:
       VEXA_BACKUP_SCRIPT_PATH: /app/scripts/linux/backup.sh
       RIS_SLOW_REQUEST_MS: "250"
     volumes:
-      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
-      - ${VEXA_DATA_ROOT}/dicom:/data/dicom
-      - ${VEXA_DATA_ROOT}/backups:/data/backups
+      - /data/vexa/programdata:/data/programdata
+      - /data/vexa/dicom:/data/dicom
+      - /data/vexa/backups:/data/backups
     depends_on:
       postgres: { condition: service_healthy }
       pacs: { condition: service_started }
@@ -212,8 +243,8 @@ services:
       DICOM_STORAGE_PATH: /data/dicom
       DICOMWEB_PACS_STORAGE_PATH: /data/dicom
     volumes:
-      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
-      - ${VEXA_DATA_ROOT}/dicom:/data/dicom:ro
+      - /data/vexa/programdata:/data/programdata
+      - /data/vexa/dicom:/data/dicom:ro
     expose: ["5994"]
     depends_on:
       pacs: { condition: service_started }
@@ -234,8 +265,8 @@ services:
       NEXIA_RIS_LAUNCH_TTL_SECONDS: "60"
       MPR_FRAME_CACHE_MB: ${MPR_FRAME_CACHE_MB:-512}
     volumes:
-      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
-      - ${VEXA_DATA_ROOT}/dicom:/data/dicom:ro
+      - /data/vexa/programdata:/data/programdata
+      - /data/vexa/dicom:/data/dicom:ro
     expose: ["5992"]
     depends_on:
       pacs: { condition: service_started }
@@ -253,8 +284,8 @@ services:
       ECG_VIEWER_PORT: "7771"
       DICOMWEB_RS_ROOT: http://pacs:5001/rs
     volumes:
-      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
-      - ${VEXA_DATA_ROOT}/dicom:/data/dicom:ro
+      - /data/vexa/programdata:/data/programdata
+      - /data/vexa/dicom:/data/dicom:ro
     expose: ["7771"]
     networks: [vexa]
 
