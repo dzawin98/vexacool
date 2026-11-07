@@ -102,6 +102,10 @@ services:
       PACS_DB_NAME: velopacs_db
       DIMSE_AE_TITLE: ${PACS_AE_TITLE:-VEXA_PACS}
       DIMSE_PORT: "5757"
+      # DIMSE SCP membaca PACS/config/default.json (bukan env DIMSE_*): default-nya
+      # 127.0.0.1:8890, yang di container berarti tidak bisa dihubungi modalitas.
+      # NODE_CONFIG menimpa sumber DICOM + storage tanpa menyentuh berkas config.
+      NODE_CONFIG: '{"source":{"aet":"${PACS_AE_TITLE:-VEXA_PACS}","ip":"0.0.0.0","port":"5757"},"storagePath":"/data/dicom"}'
       DICOMWEB_DIMSE_STORAGE_COMPRESSION: "true"
       DICOMWEB_J2K_PERSISTENT: "true"
       DICOMWEB_J2K_WORKERS: ${DICOMWEB_J2K_WORKERS:-2}
