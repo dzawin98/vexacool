@@ -149,6 +149,8 @@ services:
       MWL_SCP_BIND: 0.0.0.0
       MWL_SCP_PORT: "5656"
       MWL_SCP_INTERNAL_KEY: ${SERVICE_PASSWORD_MWLKEY}
+      # default di skrip adalah http://127.0.0.1:3001 (di dalam container sendiri)
+      RIS_BACKEND_ROOT: http://ris-api:3001
     volumes:
       - /data/vexa/programdata:/data/programdata
     ports:
