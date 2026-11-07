@@ -1,6 +1,11 @@
 # PACS — DICOMweb (5001) + DIMSE SCP (5757) + MWL mirror.
 # Catatan build:
-#  - dicom-dimse-native adalah modul native (node-gyp) -> butuh python3/make/g++/cmake/git.
+#  - dicom-dimse-native adalah modul native (node-gyp/cmake-js) -> butuh
+#    python3/make/g++/cmake/git.
+#  - WAJIB `npm rebuild dicom-dimse-native --build-from-source`: paket ini membawa
+#    prebuilt dcmtk.node yang dibangun di toolchain lebih baru (butuh
+#    GLIBCXX_3.4.32), sedangkan bookworm hanya punya sampai 3.4.30. Tanpa rebuild,
+#    container crash loop: "version `GLIBCXX_3.4.32' not found".
 #  - decode JPEG2000/HTJ2K dijalankan sebagai proses python terpisah (j2kWorkerPool),
 #    jadi interpreter-nya harus benar-benar punya pylibjpeg-openjpeg (env
 #    DICOMWEB_JPEG2000_DECODER_PYTHON). Kalau tidak -> render/thumbnail HTTP 500.
@@ -19,7 +24,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app/PACS
 COPY apps/PACS/package.json apps/PACS/package-lock.json ./
 # full install (bukan --omit=dev) supaya `npm run warm-cache` / ts-node tetap bisa dipakai
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund \
+ && npm rebuild dicom-dimse-native --build-from-source --no-audit --no-fund
 
 COPY apps/PACS/requirements-mwl.txt ./
 RUN pip install --no-cache-dir -r requirements-mwl.txt imagecodecs
