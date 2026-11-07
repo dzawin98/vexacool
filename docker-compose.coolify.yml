@@ -1,0 +1,259 @@
+# VEXAPACS-RIS di Coolify (Docker Compose)
+# ------------------------------------------------------------------
+# Satu domain publik (ris-web / nginx) + PACS DIMSE diekspos ke host.
+# Layout URL identik dengan produksi Linux/Windows yang sudah ada:
+#   /            -> RIS SPA
+#   /api/*       -> RIS backend 3001
+#   /rs/*        -> PACS DICOMweb 5001
+#   /viewer/*    -> Desktop viewer SSR 5994  (prefix TIDAK di-strip)
+#   /mobile/*    -> Mobile viewer 5992       (prefix TIDAK di-strip)
+#
+# Data persisten hanya lewat ${VEXA_DATA_ROOT} (lihat COOLIFY.md).
+# Jangan mengubah path DI DALAM container (DICOM_STORAGE_PATH=/data/dicom);
+# kalau butuh lebih besar, yang diganti adalah disk/mount di host.
+
+name: vexa
+
+x-common-env: &common-env
+  NODE_ENV: production
+  TZ: ${TZ:-Asia/Jakarta}
+  # ---- Lisensi (WAJIB di Linux; default di kode masih C:\ProgramData) ----
+  VEXA_LICENSE_ENFORCE: ${VEXA_LICENSE_ENFORCE:-false}
+  VEXA_LICENSE_FILE: /data/programdata/license.lic
+  VEXA_LICENSE_PUBLIC_KEY_PATH: /data/programdata/public.pem
+  # ---- Pengganti C:\ProgramData\VEXAPACS ----
+  VEXA_PROGRAM_DATA_DIR: /data/programdata
+  VELO_PROGRAM_DATA_DIR: /data/programdata
+  VEXA_DOSE_RULES_PATH: /data/programdata/dose-rules.json
+  VEXA_BACKUP_CONFIG_PATH: /data/programdata/backup.config.json
+  # ---- DICOM ----
+  DICOM_STORAGE_PATH: /data/dicom
+  DICOMWEB_PACS_STORAGE_PATH: /data/dicom
+  # ---- PACS ----
+  DICOMWEB_PACS_ROOT: http://pacs:5001
+  DICOMWEB_PACS_RS_ROOT: http://pacs:5001/rs
+  DICOMWEB_PACS_DICOM_HOST: pacs
+  DICOMWEB_PACS_DICOM_PORT: "5757"
+  DICOMWEB_PACS_AET: ${PACS_AE_TITLE:-VEXA_PACS}
+
+services:
+  # ------------------------------------------------------------------ database
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      POSTGRES_DB: vexaris_db
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - ${VEXA_DATA_ROOT}/postgres:/var/lib/postgresql/data
+      - ./deploy/coolify/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vexaris_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [vexa]
+
+  # ---------------------------------------------------------------------- PACS
+  pacs:
+    build:
+      context: .
+      dockerfile: deploy/docker/pacs.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASS: ${SERVICE_PASSWORD_POSTGRES}
+      PACS_DB_NAME: velopacs_db
+      DIMSE_AE_TITLE: ${PACS_AE_TITLE:-VEXA_PACS}
+      DIMSE_PORT: "5757"
+      DICOMWEB_DIMSE_STORAGE_COMPRESSION: "true"
+      DICOMWEB_J2K_PERSISTENT: "true"
+      DICOMWEB_J2K_WORKERS: ${DICOMWEB_J2K_WORKERS:-2}
+      DICOMWEB_FRAME_DISK_CACHE_ENABLED: "true"
+      DICOMWEB_FRAME_DISK_CACHE_DIR: /data/frame-cache
+      DICOMWEB_FRAME_DISK_CACHE_MB: ${DICOMWEB_FRAME_DISK_CACHE_MB:-4096}
+      DICOMWEB_FRAME_DISK_CACHE_DAYS: "14"
+      DICOMWEB_FRAME_WARM_ENABLED: "true"
+      DICOMWEB_HTTP_COMPRESS: "true"
+      DICOM_TRAFFIC_INTERNAL_KEY: ${SERVICE_PASSWORD_TRAFFICKEY}
+    volumes:
+      - ${VEXA_DATA_ROOT}/dicom:/data/dicom
+      - ${VEXA_DATA_ROOT}/frame-cache:/data/frame-cache
+      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
+    ports:
+      # DIMSE C-STORE untuk modalitas — TCP mentah, tidak bisa lewat reverse proxy
+      - "${PACS_DIMSE_PORT:-5757}:5757"
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:5001/rs/studies?limit=1',
+          {headers:{Accept:'application/dicom+json'}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks: [vexa]
+
+  # ------------------------------------------------------------------ MWL SCP
+  mwl-scp:
+    build:
+      context: .
+      dockerfile: deploy/docker/mwl-scp.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      MWL_SCP_AET: ${MWL_SCP_AET:-NEXIARIS}
+      MWL_SCP_BIND: 0.0.0.0
+      MWL_SCP_PORT: "5656"
+      MWL_SCP_INTERNAL_KEY: ${SERVICE_PASSWORD_MWLKEY}
+    volumes:
+      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
+    ports:
+      - "${MWL_SCP_PORT:-5656}:5656"
+    depends_on:
+      ris-api: { condition: service_started }
+    networks: [vexa]
+
+  # ------------------------------------------------------------------ RIS API
+  ris-api:
+    build:
+      context: .
+      dockerfile: deploy/docker/ris-backend.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "3001"
+      # RIS DB
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASS: ${SERVICE_PASSWORD_POSTGRES}
+      DB_NAME: vexaris_db
+      # PACS DB (dibaca RIS untuk metadata/log)
+      PACS_DB_HOST: postgres
+      PACS_DB_PORT: "5432"
+      PACS_DB_USER: postgres
+      PACS_DB_PASS: ${SERVICE_PASSWORD_POSTGRES}
+      PACS_DB_NAME: velopacs_db
+      JWT_SECRET: ${SERVICE_PASSWORD_JWT}
+      PACS_CREDENTIAL_SECRET: ${SERVICE_PASSWORD_PACSCRED}
+      MWL_SCP_INTERNAL_KEY: ${SERVICE_PASSWORD_MWLKEY}
+      DICOM_TRAFFIC_INTERNAL_KEY: ${SERVICE_PASSWORD_TRAFFICKEY}
+      # /viewer relatif: satu domain, satu origin (lihat ris.conf)
+      PACS_VIEWER_BASE_URL: /viewer
+      ORDER_OUT_VIEWER_URL: /viewer
+      VEXA_BACKUP_SCRIPT_PATH: /app/scripts/linux/backup.sh
+      RIS_SLOW_REQUEST_MS: "250"
+    volumes:
+      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
+      - ${VEXA_DATA_ROOT}/dicom:/data/dicom
+      - ${VEXA_DATA_ROOT}/backups:/data/backups
+    depends_on:
+      postgres: { condition: service_healthy }
+      pacs: { condition: service_started }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3001/api/system/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 8s
+      retries: 10
+      start_period: 30s
+    networks: [vexa]
+
+  # --------------------------------------------------------------- RIS gateway
+  ris-web:
+    build:
+      context: .
+      dockerfile: deploy/docker/ris-frontend.Dockerfile
+    restart: unless-stopped
+    environment:
+      # Coolify mengisi nilai ini saat domain di-assign
+      - SERVICE_FQDN_RISWEB_80
+    expose: ["80"]
+    depends_on:
+      ris-api: { condition: service_started }
+      pacs: { condition: service_started }
+      desktop-viewer: { condition: service_started }
+    networks: [vexa]
+
+  # --------------------------------------------------------- Desktop viewer SSR
+  desktop-viewer:
+    build:
+      context: .
+      dockerfile: deploy/docker/desktop-viewer.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "5994"
+      VIEWER_DIST_DIR: "/app/DESKTOP VIEWER/dist"
+      NEXIA_AUTH_DB: /data/programdata/auth-db-desktop.json
+      # NEXIA_RIS_SHARED_SECRET sengaja TIDAK diisi: nilai bawaan viewer & RIS
+      # sudah identik. Baris kosong ("NEXIA_RIS_SHARED_SECRET=") justru
+      # mematikan semua panggilan RIS->viewer. Kalau mau diganti, isi KETIGA
+      # kunci dengan nilai yang sama.
+      NEXIA_SESSION_TTL_DAYS: "7"
+      NEXIA_RIS_LAUNCH_TTL_SECONDS: "60"
+      VEXA_THIN_VOLUME_CACHE_MAX: ${VEXA_THIN_VOLUME_CACHE_MAX:-2}
+      VEXA_VIEWER_JOB_CONCURRENCY: ${VEXA_VIEWER_JOB_CONCURRENCY:-2}
+      VEXA_DICOMWEB_WARMUP_ENABLED: "true"
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      DICOMWEB_JPEG2000_DECODER_PYTHON: /usr/bin/python3
+      DICOM_STORAGE_PATH: /data/dicom
+      DICOMWEB_PACS_STORAGE_PATH: /data/dicom
+    volumes:
+      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
+      - ${VEXA_DATA_ROOT}/dicom:/data/dicom:ro
+    expose: ["5994"]
+    depends_on:
+      pacs: { condition: service_started }
+    networks: [vexa]
+
+  # ---------------------------------------------------------- Mobile viewer 5992
+  mobile-viewer:
+    build:
+      context: .
+      dockerfile: deploy/docker/mobile-viewer.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PORT: "5992"
+      VIEWER_DIST_DIR: "/app/MOBILITY VIEWER/dist"
+      NEXIA_AUTH_DB: /data/programdata/auth-db-mobile.json
+      NEXIA_SESSION_TTL_DAYS: "7"
+      NEXIA_RIS_LAUNCH_TTL_SECONDS: "60"
+      MPR_FRAME_CACHE_MB: ${MPR_FRAME_CACHE_MB:-512}
+    volumes:
+      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
+      - ${VEXA_DATA_ROOT}/dicom:/data/dicom:ro
+    expose: ["5992"]
+    depends_on:
+      pacs: { condition: service_started }
+    networks: [vexa]
+
+  # --------------------------------------------------------------- ECG viewer
+  # Tidak punya prefix /ecg -> butuh domain sendiri (atau sub-path rewrite).
+  ecg-viewer:
+    build:
+      context: .
+      dockerfile: deploy/docker/ecg-viewer.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      ECG_VIEWER_PORT: "7771"
+      DICOMWEB_RS_ROOT: http://pacs:5001/rs
+    volumes:
+      - ${VEXA_DATA_ROOT}/programdata:/data/programdata
+      - ${VEXA_DATA_ROOT}/dicom:/data/dicom:ro
+    expose: ["7771"]
+    networks: [vexa]
+
+networks:
+  vexa:
+    driver: bridge

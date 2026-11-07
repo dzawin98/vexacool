@@ -1,0 +1,30 @@
+# Skrip .install paket pacman (dipanggil otomatis oleh pacman).
+# Tidak ada pekerjaan jaringan di sini: langkah berat ada di `vexapacs-setup`.
+
+post_install() {
+  cat <<'EOF'
+  VEXAPACS-RIS terpasang. Langkah berikutnya:
+
+    sudo vexapacs-setup              # venv python + npm build + database + unit systemd
+    sudo vexapacs-setup --dry-run    # lihat rencana lebih dulu
+
+  Setelah selesai:
+    bash /opt/vexapacs/scripts/linux/services.sh status
+    /opt/vexapacs/scripts/linux/selfcheck.sh    # cek struktur
+    buka admin: http://IP-SERVER:8899 (token di /etc/vexapacs/admin.env)
+    lisensi    : /opt/vexapacs/docs/LICENSE-ON-LINUX.md
+EOF
+}
+
+post_upgrade() { post_install; }
+
+pre_remove() {
+  for unit in vexa-ris-backend vexa-ris-frontend vexa-pacs vexa-mwl vexa-viewer vexa-viewer-mobile vexa-ecg vexa-admin; do
+    systemctl disable --now "$unit" 2>/dev/null || true
+  done
+  echo "Unit VEXA dihentikan. Data di /var/lib/vexapacs dan /srv/vexadata TIDAK dihapus."
+}
+
+post_remove() {
+  echo "Folder /opt/vexapacs/venv dan node_modules dibiarkan. Hapus manual bila perlu: rm -rf /opt/vexapacs"
+}

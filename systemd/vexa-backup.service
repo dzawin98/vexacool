@@ -1,0 +1,11 @@
+[Unit]
+Description=VEXAPACS backup harian (pg_dump + storage + programData)
+Documentation=file:/opt/vexapacs/docs/LINUX-INSTALL.md
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/vexapacs/vexa.env
+ExecStart=/bin/bash /opt/vexapacs/scripts/linux/backup.sh --config /var/lib/vexapacs/backup.config.json
+StandardOutput=append:/var/log/vexapacs/backup.log
+StandardError=append:/var/log/vexapacs/backup.log

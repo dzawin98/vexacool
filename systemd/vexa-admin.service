@@ -1,0 +1,24 @@
+[Unit]
+Description=VEXA Admin (web monitoring + kontrol service VEXA di Linux)
+Documentation=file:/opt/vexapacs/admin/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vexa
+Group=vexa
+WorkingDirectory=/opt/vexapacs/admin
+EnvironmentFile=-/etc/vexapacs/vexa.env
+EnvironmentFile=-/etc/vexapacs/admin.env
+Environment=VEXA_ADMIN_PORT=8899
+# Diakses lewat Caddy di /adminVEXA, jadi tidak perlu terbuka ke LAN
+Environment=VEXA_ADMIN_HOST=127.0.0.1
+ExecStart=/usr/bin/node /opt/vexapacs/admin/server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/vexapacs/admin.out.log
+StandardError=append:/var/log/vexapacs/admin.err.log
+
+[Install]
+WantedBy=multi-user.target

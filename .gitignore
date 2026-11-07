@@ -1,0 +1,35 @@
+# ---- dependensi & hasil build (dibangun ulang di Docker/Coolify) ----
+**/node_modules/
+**/.cache/
+**/__pycache__/
+**/*.pyc
+**/dist/
+**/*.map
+
+# ---- data runtime / pasien ----
+DATA/
+**/DATA/
+apps/PACS/import/
+**/logs/
+*.log
+**/scratch/
+**/mwl-debug-outbox/
+**/frame-cache/
+**/backups/
+
+# ---- rahasia & konfigurasi lokal (jangan pernah masuk repo) ----
+.env
+.env.*
+!.env.example
+**/settings.json
+*.lic
+*.pem
+**/auth-db*.json
+**/license.db
+
+# ---- artefak installer / arsip ----
+installer/Output/
+installer/payload/
+*.exe
+*.zip
+*.tar.gz

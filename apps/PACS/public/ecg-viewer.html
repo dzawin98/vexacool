@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nexia ECG Viewer</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, Segoe UI, Arial, sans-serif; background: #111827; color: #e5e7eb; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; overflow: hidden; background: #17151a; }
+      .viewer-frame { display: grid; grid-template-rows: 46px 1fr; height: 100vh; }
+      .appbar { display: flex; align-items: center; gap: 18px; border-bottom: 1px solid #363139; background: #2a262d; padding: 0 14px; color: #f8fafc; }
+      .brand { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 800; letter-spacing: .02em; }
+      .brand-logo { width: 30px; height: 30px; border-radius: 8px; box-shadow: 0 0 18px rgba(56,189,248,.18); }
+      .shell { display: grid; grid-template-columns: 190px 1fr 360px; min-height: 0; }
+      .study-list { border-right: 1px solid #3a3540; background: #211f26; min-height: 0; overflow: auto; padding: 8px 6px; }
+      .study-list h2 { margin: 0 0 6px 4px; color: #cbd5e1; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+      .patient-card { padding: 0 4px 7px; margin-bottom: 4px; border-bottom: 1px solid rgba(148,163,184,.14); }
+      .patient-name { color: #f8fafc; font-size: 11px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .patient-meta { color: #94a3b8; font-size: 10px; margin-top: 2px; }
+      .study-card { width: 100%; height: auto; text-align: left; display: block; border: 0; border-radius: 4px; background: transparent; padding: 6px 5px; box-shadow: none; }
+      .study-card.active { background: rgba(14,165,233,.16); }
+      .study-card + .study-card { margin-top: 1px; }
+      .study-card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+      .study-badge { color: #7dd3fc; background: transparent; border: 0; padding: 0; font-size: 9px; font-weight: 800; }
+      .study-name { color: #f8fafc; font-size: 11px; font-weight: 700; margin-top: 3px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .study-detail { color: #94a3b8; font-size: 10px; margin-top: 2px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .study-wave { display: none; }
+      .main { min-width: 0; padding: 14px 18px; overflow: auto; background: #29262d; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+      .title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      .icon { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; background: #3b3a42; color: #cbd5e1; border: 1px solid #5b5561; font-size: 10px; }
+      h1 { margin: 0; font-size: 16px; font-weight: 700; }
+      .sub { margin-top: 3px; color: #94a3b8; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      select, button { height: 32px; border-radius: 5px; border: 1px solid #4b4650; background: #343039; color: #e5e7eb; padding: 0 10px; }
+      button { cursor: pointer; font-weight: 700; }
+      button.active { border-color: #38bdf8; background: #075985; color: #fff; box-shadow: inset 0 0 0 1px rgba(125,211,252,.18); }
+      .tool-btn { display: inline-flex; align-items: center; gap: 6px; }
+      .copy-btn { border-color: #14532d; background: #166534; color: #dcfce7; }
+      .tool-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
+      canvas { display: block; width: 100%; min-width: 0; height: 100%; border: 1px solid #5b5561; border-radius: 0; background: #fff; box-shadow: none; }
+      .viewport-grid { display: grid; gap: 10px; min-width: 860px; height: 620px; }
+      .viewport-grid.layout-1x1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+      .viewport-grid.layout-2x1 { grid-template-columns: repeat(2, 1fr); grid-template-rows: 1fr; }
+      .viewport-grid.layout-1x2 { grid-template-columns: 1fr; grid-template-rows: repeat(2, 1fr); }
+      .viewport-grid.layout-2x2 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+      .viewport { position: relative; min-width: 0; min-height: 0; border: 2px solid transparent; background: #111827; }
+      .viewport.active { border-color: #38bdf8; box-shadow: 0 0 22px rgba(56,189,248,.18); }
+      .viewport-label { position: absolute; left: 10px; top: 8px; z-index: 2; color: #e0f2fe; background: rgba(15,23,42,.78); border: 1px solid rgba(56,189,248,.35); border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; pointer-events: none; }
+      .readout { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+      .comparison { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; margin-top: 12px; }
+      .compare-card { height: auto; text-align: left; border: 1px solid #3f3a44; background: #211f26; border-radius: 8px; padding: 10px; }
+      .compare-card.active { border-color: rgba(56,189,248,.75); }
+      .compare-title { color: #f8fafc; font-size: 12px; font-weight: 800; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; }
+      .compare-canvas { width: 100%; min-width: 0; height: 220px; border-radius: 4px; }
+      .card { border: 1px solid #3f3a44; background: #242129; border-radius: 4px; padding: 10px; }
+      .label { color: #94a3b8; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+      .value { margin-top: 5px; font-size: 16px; font-weight: 800; }
+      aside { border-left: 1px solid #3a3540; background: #242129; padding: 10px; overflow: auto; }
+      .panel-title { font-size: 12px; font-weight: 800; color: #e5e7eb; margin: 0 0 7px; text-transform: uppercase; letter-spacing: .08em; }
+      .panel-section { margin-bottom: 16px; }
+      .data-table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid rgba(148,163,184,.16); border-radius: 8px; font-size: 11px; background: #1d1a22; }
+      .data-table th { color: #94a3b8; background: rgba(15,23,42,.32); padding: 7px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid rgba(148,163,184,.14); }
+      .data-table td { color: #dbeafe; padding: 7px 8px; vertical-align: top; border-bottom: 1px solid rgba(148,163,184,.1); }
+      .data-table tr:last-child td { border-bottom: 0; }
+      .data-table td:first-child { color: #f8fafc; font-weight: 700; }
+      .muted-cell { color: #94a3b8 !important; font-weight: 500 !important; }
+      .analysis-text { border: 1px solid rgba(148,163,184,.16); border-radius: 8px; background: #1d1a22; color: #dbeafe; padding: 9px; font-size: 11px; line-height: 1.45; white-space: pre-wrap; }
+      .analysis-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+      .error { padding: 24px; color: #fecaca; }
+      @media (max-width: 980px) { body { overflow: auto; } .viewer-frame { display: block; height: auto; } .shell { display: block; height: auto; } .study-list { display: none; } aside { border-left: 0; border-top: 1px solid #3a3540; } .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    </style>
+  </head>
+  <body>
+    <div class="viewer-frame">
+      <div class="appbar">
+        <div class="brand"><img class="brand-logo" src="/logo.png" alt="NEXIA PACS" />Nexia ECG Viewer</div>
+      </div>
+      <div class="shell">
+      <section class="study-list">
+        <h2>Study List</h2>
+        <div class="patient-card">
+          <div class="patient-name" id="listPatient">Loading...</div>
+          <div class="patient-meta" id="listPatientMeta">Preparing study</div>
+        </div>
+        <div id="studyCards"></div>
+      </section>
+      <main class="main">
+        <div class="topbar">
+          <div class="title">
+            <div>
+              <h1 id="studyTitle">Loading ECG...</h1>
+              <div class="sub" id="studySub">Preparing DICOM waveform</div>
+            </div>
+          </div>
+          <div class="controls">
+            <select id="viewportLayoutSelect" aria-label="Viewport layout"><option value="1x1">Viewport 1x1</option><option value="2x1">Viewport 2x1</option><option value="1x2">Viewport 1x2</option><option value="2x2">Viewport 2x2</option></select>
+            <select id="leadMode"><option value="all">All leads</option><option value="single">Single lead</option></select>
+            <select id="leadSelect"></select>
+            <button id="caliperBtn" class="tool-btn" type="button"><svg viewBox="0 0 24 24"><path d="M4 20 20 4" /><path d="M8 16 6 14" /><path d="M12 12 10 10" /><path d="M16 8 14 6" /></svg>Caliper</button>
+            <button id="clearCalipersBtn" class="tool-btn" type="button"><svg viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M7 7l1 13h8l1-13" /></svg>Clear</button>
+            <button id="fitBtn" class="tool-btn"><svg viewBox="0 0 24 24"><path d="M8 4H4v4" /><path d="M16 4h4v4" /><path d="M8 20H4v-4" /><path d="M16 20h4v-4" /><path d="M4 4l6 6" /><path d="M20 4l-6 6" /><path d="M4 20l6-6" /><path d="M20 20l-6-6" /></svg>Fit</button>
+          </div>
+        </div>
+        <div id="viewportGrid" class="viewport-grid layout-1x1"></div>
+        <div class="readout">
+          <div class="card"><div class="label">Cursor Time</div><div class="value" id="cursorTime">-</div></div>
+          <div class="card"><div class="label">Cursor Value</div><div class="value" id="cursorValue">-</div></div>
+          <div class="card"><div class="label">Sampling</div><div class="value" id="sampling">-</div></div>
+          <div class="card"><div class="label">Duration</div><div class="value" id="duration">-</div></div>
+        </div>
+        <div class="comparison" id="comparisonGrid"></div>
+      </main>
+      <aside>
+        <section class="panel-section">
+          <h2 class="panel-title">Suggested ECG Analysis</h2>
+          <div class="analysis-actions">
+            <button id="analyzePanelBtn" class="tool-btn" type="button">Analyze</button>
+            <button id="copyAnalysisPanelBtn" class="tool-btn copy-btn" type="button">Copy</button>
+          </div>
+          <div id="analysisOutput" class="analysis-text">Click Analyze to generate basic waveform measurements for physician review.</div>
+        </section>
+        <section class="panel-section">
+          <h2 class="panel-title">Caliper Measurements</h2>
+          <table id="markers" class="data-table"></table>
+        </section>
+        <section class="panel-section" id="annotationSection">
+          <h2 class="panel-title">DICOM Annotations</h2>
+          <table id="measurements" class="data-table"></table>
+        </section>
+        <section class="panel-section">
+          <h2 class="panel-title">Channels</h2>
+          <table id="channels" class="data-table"></table>
+        </section>
+      </aside>
+      </div>
+    </div>
+    <script src="/ecg-viewer.js?v=20260525-ecg2"></script>
+  </body>
+</html>

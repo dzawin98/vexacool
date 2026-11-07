@@ -1,0 +1,10 @@
+# /etc/sudoers.d/vexa-backup — pasang dengan mode 0440.
+# Hanya perintah jadwal backup yang diizinkan tanpa password; backend RIS tidak pernah
+# mendapat shell root penuh.
+vexa ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload
+vexa ALL=(root) NOPASSWD: /usr/bin/systemctl enable --now vexa-backup.timer
+vexa ALL=(root) NOPASSWD: /usr/bin/systemctl disable --now vexa-backup.timer
+vexa ALL=(root) NOPASSWD: /usr/bin/systemctl restart vexa-backup.timer
+vexa ALL=(root) NOPASSWD: /usr/bin/systemctl start --wait vexa-backup.service
+vexa ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/system/vexa-backup.timer.d/50-vexa.conf
+vexa ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/system/vexa-backup.timer.d/50-vexa.conf

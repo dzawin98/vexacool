@@ -1,0 +1,29 @@
+[Unit]
+Description=VEXAPACS License Manager (web internal, 8898)
+Documentation=file:/opt/vexapacs/lic-manager/README-LINUX.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vexa
+Group=vexa
+WorkingDirectory=/opt/vexapacs/lic-manager
+EnvironmentFile=-/etc/vexapacs/vexa.env
+EnvironmentFile=-/etc/vexapacs/lic-manager.env
+Environment=PORT=8898
+# internal saja: akses lewat SSH tunnel atau blok Caddy opt-in (lihat systemd/Caddyfile)
+Environment=HOST=127.0.0.1
+Environment=PRIVATE_KEY_PATH=/opt/vexapacs/lic-manager/keys/private.pem
+Environment=PUBLIC_KEY_PATH=/opt/vexapacs/lic-manager/keys/public.pem
+# database + lisensi terbit disimpan di /var/lib supaya tidak hilang saat aplikasi di-update
+Environment=DB_PATH=/var/lib/vexapacs/lic-manager/license.db
+Environment=LICENSES_DIR=/var/lib/vexapacs/lic-manager/issued
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/vexapacs/lic-manager.out.log
+StandardError=append:/var/log/vexapacs/lic-manager.err.log
+
+[Install]
+WantedBy=multi-user.target

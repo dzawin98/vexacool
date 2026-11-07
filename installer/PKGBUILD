@@ -1,0 +1,60 @@
+# Maintainer: tim VEXA
+# Paket pacman untuk CachyOS/Arch. Paket ini memasang aplikasi + unit systemd + skrip;
+# langkah berat (venv python, npm build, pembuatan database) dijalankan sekali setelah
+# instalasi lewat:  sudo vexapacs-setup
+#
+#   makepkg -si          (dari folder ini, setelah payload aplikasi siap di ./apps)
+#
+pkgname=vexapacs-ris
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="VEXAPACS-RIS: RIS, PACS DICOMweb/DIMSE, Viewer 5994, Mobile, ECG untuk Linux"
+arch=('x86_64')
+url="https://vexapacs.local"
+license=('custom')
+depends=('nodejs' 'npm' 'postgresql' 'python' 'python-pip' 'jq' 'rsync' 'cmake' 'base-devel')
+optdepends=('caddy: reverse proxy port 80/443'
+            'libvips: cadangan bila biner sharp tidak tersedia')
+install="$pkgname.install"
+backup=('etc/vexapacs/vexa.env' 'etc/vexapacs/admin.env')
+options=('!strip')
+
+package() {
+  local dest="$pkgdir/opt/vexapacs"
+  install -dm755 "$dest"
+
+  # Aplikasi + skrip + admin + dokumen (tanpa node_modules/dist: dibangun oleh vexapacs-setup)
+  # Aplikasi di ROOT paket supaya path relatif ke scripts/license tetap benar
+  cp -a "$startdir/../apps/." "$dest/"
+  for item in scripts admin docs config systemd; do
+    cp -a "$startdir/../$item" "$dest/"
+  done
+  mkdir -p "$dest/installer"
+  install -m644 "$startdir/../README.md" "$dest/README.md"
+
+  # Perintah setup + uninstall
+  install -Dm755 "$startdir/../installer/install.sh"        "$pkgdir/usr/bin/vexapacs-setup"
+  install -Dm755 "$startdir/../installer/uninstall.sh"      "$pkgdir/usr/bin/vexapacs-uninstall"
+  install -Dm644 "$startdir/../installer/PKGBUILD"          "$dest/installer/PKGBUILD"
+
+  # systemd
+  install -dm755 "$pkgdir/usr/lib/systemd/system"
+  install -m644 "$startdir/../systemd/"*.service "$pkgdir/usr/lib/systemd/system/"
+  install -m644 "$startdir/../systemd/"*.timer    "$pkgdir/usr/lib/systemd/system/"
+
+  # polkit + sudoers terbatas
+  install -Dm644 "$startdir/../systemd/50-vexa-admin.rules"       "$pkgdir/usr/share/vexapacs/polkit/50-vexa-admin.rules"
+  install -Dm644 "$startdir/../systemd/sudoers.d-vexa-backup"     "$pkgdir/usr/share/vexapacs/sudoers/vexa-backup"
+
+  # konfigurasi
+  install -Dm600 "$startdir/../config/vexa.env.template"          "$pkgdir/etc/vexapacs/vexa.env"
+  install -Dm644 "$startdir/../config/backup.config.linux.sample.json" "$pkgdir/etc/vexapacs/backup.config.json"
+  install -Dm644 "$startdir/../systemd/Caddyfile"                 "$pkgdir/etc/caddy/conf.d/vexapacs.caddy"
+  install -m644 "$startdir/../systemd/Caddyfile"                  "$dest/systemd/Caddyfile"
+
+  # dokumen
+  install -dm755 "$pkgdir/usr/share/doc/$pkgname"
+  for doc in LINUX-INSTALL.md LICENSE-ON-LINUX.md PORTING-NOTES.md; do
+    install -m644 "$startdir/../docs/$doc" "$pkgdir/usr/share/doc/$pkgname/$doc"
+  done
+}

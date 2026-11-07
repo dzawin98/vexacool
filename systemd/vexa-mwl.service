@@ -1,0 +1,26 @@
+# VEXAPACS-RIS di CachyOS/Arch (systemd). Pasang ke /etc/systemd/system/.
+# Environment bersama ada di /etc/vexapacs/vexa.env (chmod 600, berisi kredensial + lisensi).
+[Unit]
+Description=VEXAPACS MWL SCP (pynetdicom, port 5656)
+Documentation=file:/opt/vexapacs/docs/LINUX-INSTALL.md
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=vexa
+Group=vexa
+WorkingDirectory=/opt/vexapacs/RIS/backend/mwl_scp
+EnvironmentFile=-/etc/vexapacs/vexa.env
+Environment=MWL_SCP_AET=NEXIARIS
+Environment=MWL_SCP_BIND=0.0.0.0
+Environment=MWL_SCP_PORT=5656
+ExecStart=/opt/vexapacs/venv/bin/python nexia_mwl_scp.py
+Restart=on-failure
+RestartSec=3
+# Log terpisah per service supaya bisa dibaca dari admin web / journalctl
+StandardOutput=append:/var/log/vexapacs/mwl.out.log
+StandardError=append:/var/log/vexapacs/mwl.err.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+# VEXAPACS-RIS di CachyOS/Arch (systemd). Pasang ke /etc/systemd/system/.
+# Environment bersama ada di /etc/vexapacs/vexa.env (chmod 600, berisi kredensial + lisensi).
+[Unit]
+Description=VEXAPACS RIS Frontend (static + proxy /api, port 8080)
+Documentation=file:/opt/vexapacs/docs/LINUX-INSTALL.md
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=vexa
+Group=vexa
+WorkingDirectory=/opt/vexapacs/RIS/frontend
+EnvironmentFile=-/etc/vexapacs/vexa.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/vexapacs/scripts/linux/static-server.js --root /opt/vexapacs/RIS/frontend/dist --port 8080 --proxy /api=http://127.0.0.1:3001
+Restart=on-failure
+RestartSec=3
+# Log terpisah per service supaya bisa dibaca dari admin web / journalctl
+StandardOutput=append:/var/log/vexapacs/ris-frontend.out.log
+StandardError=append:/var/log/vexapacs/ris-frontend.err.log
+
+[Install]
+WantedBy=multi-user.target

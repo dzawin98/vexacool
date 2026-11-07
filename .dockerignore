@@ -1,0 +1,35 @@
+# Build context harus kecil: image VEXA memuat 7 aplikasi + scripts + tools.
+# Yang di-exclude di sini TIDAK boleh dibutuhkan saat `npm ci` / `npm run build`.
+
+**/node_modules
+**/dist
+**/build
+**/.cache
+**/__pycache__
+**/*.pyc
+**/venv
+**/.venv
+
+# Data pasien & runtime — jangan pernah masuk image
+DATA
+**/DATA
+**/data
+**/logs
+**/*.log
+.env
+.env.*
+*.lic
+*.pem
+
+# Artefak installer Windows / arsip
+installer/payload
+installer/Output
+*.exe
+*.zip
+*.tar.gz
+
+# Referensi non-runtime
+docs
+tools/service-monitor
+admin
+deploy/coolify

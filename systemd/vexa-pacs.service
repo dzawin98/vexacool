@@ -1,0 +1,24 @@
+# VEXAPACS-RIS di CachyOS/Arch (systemd). Pasang ke /etc/systemd/system/.
+# Environment bersama ada di /etc/vexapacs/vexa.env (chmod 600, berisi kredensial + lisensi).
+[Unit]
+Description=VEXAPACS PACS DICOMweb + DIMSE SCP (5001 / 5757)
+Documentation=file:/opt/vexapacs/docs/LINUX-INSTALL.md
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=vexa
+Group=vexa
+WorkingDirectory=/opt/vexapacs/PACS
+EnvironmentFile=-/etc/vexapacs/vexa.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm start --silent
+Restart=on-failure
+RestartSec=3
+# Log terpisah per service supaya bisa dibaca dari admin web / journalctl
+StandardOutput=append:/var/log/vexapacs/pacs.out.log
+StandardError=append:/var/log/vexapacs/pacs.err.log
+
+[Install]
+WantedBy=multi-user.target

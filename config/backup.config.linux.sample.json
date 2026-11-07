@@ -1,0 +1,28 @@
+{
+  "backupRoot": "/srv/vexabackup",
+  "dataPath": "/srv/vexadata",
+  "programDataPath": "/var/lib/vexapacs",
+  "includeDicomData": true,
+  "includeProgramData": true,
+  "postgres": {
+    "host": "localhost",
+    "port": 5432,
+    "user": "postgres",
+    "password": "GANTI_PASSWORD_POSTGRES",
+    "risDb": "vexaris_db",
+    "pacsDb": "vexapacs_db",
+    "binPath": ""
+  },
+  "services": [
+    "vexa-ris-backend",
+    "vexa-ris-frontend",
+    "vexa-pacs",
+    "vexa-mwl",
+    "vexa-viewer",
+    "vexa-viewer-mobile",
+    "vexa-ecg"
+  ],
+  "retention": { "keepLast": 7 },
+  "schedule": { "enabled": true, "frequency": "daily", "time": "23:00" },
+  "quiesceServices": false
+}

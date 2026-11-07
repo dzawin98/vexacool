@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VEXA Admin — Linux</title>
+<style>
+  :root { color-scheme: dark; --bg:#0f1720; --panel:#16202b; --line:#26333f; --text:#e6edf3; --muted:#8b9bab; --ok:#3fb950; --warn:#d29922; --err:#f85149; --accent:#388bfd; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:14px 20px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; }
+  header h1 { font-size:16px; margin:0; font-weight:600; letter-spacing:.3px; }
+  .grow { flex:1; }
+  button { background:#1f2b38; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#04121f; font-weight:600; }
+  input { background:#0b141c; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  main { padding:18px 20px 60px; display:grid; gap:18px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  section h2 { font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); font-size:13px; }
+  th { color:var(--muted); font-weight:500; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; }
+  .ok { background:var(--ok); } .warn { background:var(--warn); } .err { background:var(--err); }
+  pre { background:#0b141c; border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; max-height:320px; font-size:12px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:12px; }
+  .card { background:#0b141c; border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .card b { display:block; font-size:18px; margin-top:4px; }
+  .muted { color:var(--muted); font-size:12px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>VEXA Admin — <span class="muted">pengganti VexaServiceMonitor (Windows)</span></h1>
+  <div class="grow"></div>
+  <div class="row">
+    <input id="token" type="password" placeholder="token admin" />
+    <button class="primary" onclick="saveToken()">Simpan</button>
+    <button onclick="refresh()">Refresh</button>
+  </div>
+</header>
+<main>
+  <section>
+    <h2>Services</h2>
+    <table><thead><tr><th>Service</th><th>Status</th><th>Port</th><th>Sejak</th><th></th></tr></thead>
+    <tbody id="services"></tbody></table>
+  </section>
+
+  <section>
+    <h2>System Monitor</h2>
+    <div class="cards" id="storage"></div>
+    <div class="cards" id="databases" style="margin-top:12px"></div>
+    <pre id="pacs"></pre>
+  </section>
+
+  <section>
+    <h2>Backup</h2>
+    <div class="row"><button onclick="runBackup()">Jalankan backup sekarang</button><span id="backupTimer" class="muted"></span></div>
+    <table style="margin-top:10px"><thead><tr><th>Folder</th><th>Ukuran</th><th>Waktu</th></tr></thead><tbody id="backups"></tbody></table>
+  </section>
+
+  <section>
+    <h2>Lisensi</h2>
+    <div id="license" class="muted">memuat…</div>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div class="row"><input id="logUnit" value="vexa-ris-backend" /><button onclick="loadLog()">Tampilkan</button><span class="muted">200 baris terakhir</span></div>
+    <pre id="log">pilih service lalu klik Tampilkan</pre>
+  </section>
+</main>
+<script>
+const state = { token: localStorage.getItem('vexaAdminToken') || '' };
+document.getElementById('token').value = state.token;
+
+function saveToken() { state.token = document.getElementById('token').value.trim(); localStorage.setItem('vexaAdminToken', state.token); refresh(); }
+async function api(path, options = {}) {
+  const res = await fetch(path, { ...options, headers: { 'x-admin-token': state.token, ...(options.headers || {}) } });
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { error: text }; }
+}
+const dot = active => active === 'active' ? 'ok' : (active === 'activating' || active === 'deactivating' ? 'warn' : 'err');
+
+async function refresh() {
+  const status = await api('api/status');
+  if (status.error) { document.getElementById('services').innerHTML = `<tr><td colspan="5" class="muted">${status.error}</td></tr>`; return; }
+  document.getElementById('services').innerHTML = status.services.map(s => `
+    <tr>
+      <td>${s.label}</td>
+      <td><span class="dot ${dot(s.active)}"></span>${s.installed ? s.active : 'belum terpasang'}${s.sub ? ' / ' + s.sub : ''}</td>
+      <td>${s.port}</td>
+      <td class="muted">${(s.since || '').replace('T', ' ').slice(0, 19)}</td>
+      <td class="row">
+        <button onclick="act('${s.unit}','start')">start</button>
+        <button onclick="act('${s.unit}','restart')">restart</button>
+        <button onclick="act('${s.unit}','stop')">stop</button>
+      </td>
+    </tr>`).join('');
+  loadMetrics();
+  loadLicense();
+}
+
+async function act(unit, action) {
+  const result = await api(`api/service/${unit}/${action}`, { method: 'POST' });
+  alert(`${action} ${unit}: ${result.ok ? 'ok' : 'GAGAL'}\n${result.output || result.error || ''}`);
+  refresh();
+}
+
+async function loadMetrics() {
+  const data = await api('api/metrics');
+  document.getElementById('storage').innerHTML = (data.storage || []).map(s => `
+    <div class="card"><span class="muted">${s.label} — ${s.target}</span><b>${s.freeGb ?? '-'} GB bebas</b>
+    <span class="muted">terpakai ${s.usedGb ?? '-'} / ${s.sizeGb ?? '-'} GB (${s.usePercent || '-'})</span></div>`).join('');
+  const sizes = data.databases?.sizes || {};
+  document.getElementById('databases').innerHTML = Object.keys(sizes).length
+    ? Object.entries(sizes).map(([name, size]) => `<div class="card"><span class="muted">database ${name}</span><b>${size}</b></div>`).join('')
+    : `<div class="card"><span class="muted">${data.databases?.hint || 'ukuran DB tidak tersedia'}</span></div>`;
+  const pacs = data.pacsStats?.ok ? data.pacsStats.body : (data.pacsStats?.body || '{}');
+  document.getElementById('pacs').textContent = 'PACS stats: ' + pacs;
+  document.getElementById('backups').innerHTML = (data.backups?.entries || []).map(b =>
+    `<tr><td>${b.name}</td><td>${b.sizeGb} GB</td><td class="muted">${new Date(b.modified).toLocaleString()}</td></tr>`).join('')
+    || `<tr><td colspan="3" class="muted">belum ada backup di ${data.backups?.root || '-'}</td></tr>`;
+  const timer = await api('api/backup/status');
+  document.getElementById('backupTimer').textContent = timer.timer ? `jadwal berikutnya: ${timer.timer}` : '';
+}
+
+async function runBackup() {
+  if (!confirm('Jalankan backup sekarang? Proses bisa lama untuk storage besar.')) return;
+  const result = await api('api/backup/run', { method: 'POST' });
+  alert(result.ok ? 'Backup selesai' : 'Backup gagal');
+  loadMetrics();
+}
+
+async function loadLicense() {
+  const info = await api('api/license');
+  if (!info.present) { document.getElementById('license').innerHTML = `<span class="muted">Lisensi belum ada di ${info.file}</span>`; return; }
+  const p = info.payload || {};
+  const flags = [
+    info.signatureValid === true ? '<span class="dot ok"></span>tanda tangan sah' : (info.signatureValid === false ? '<span class="dot err"></span>tanda tangan TIDAK sah' : 'tanda tangan tidak diperiksa'),
+    info.expired ? '<span class="dot err"></span>KEDALUWARSA' : 'masa berlaku ok',
+    info.notYetActive ? '<span class="dot warn"></span>belum aktif' : '',
+  ].filter(Boolean).join(' &nbsp;|&nbsp; ');
+  document.getElementById('license').innerHTML = `
+    <div class="row" style="margin-bottom:8px">${flags}</div>
+    <div class="muted">customer: <b>${p.customerName || '-'}</b> (${p.customerId || '-'}) | licenseId: ${p.licenseId || '-'}</div>
+    <div class="muted">module: ${(p.modules || []).join(', ') || '-'}</div>
+    <div class="muted">machineId: <code>${p.machineId || '(tanpa binding)'}</code></div>
+    <div class="muted">berlaku: ${p.notBefore || '-'} → ${p.expiresAt || 'tanpa batas'}</div>`;
+}
+
+async function loadLog() {
+  const unit = document.getElementById('logUnit').value.trim();
+  const data = await api(`api/logs/${unit}?lines=200`);
+  document.getElementById('log').textContent = data.available ? data.content : (data.hint || data.error || 'log kosong');
+}
+
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

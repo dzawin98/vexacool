@@ -1,0 +1,49 @@
+:80 {
+	encode zstd gzip
+	# RIS frontend (SPA) + API
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle /rs/* {
+		reverse_proxy 127.0.0.1:5001
+	}
+	handle /wado* {
+		reverse_proxy 127.0.0.1:5001
+	}
+	handle /adminVEXA {
+		redir /adminVEXA/ permanent
+	}
+	# VEXA Admin (pengganti VexaServiceMonitor) di path /adminVEXA
+	handle_path /adminVEXA/* {
+		reverse_proxy 127.0.0.1:8899
+	}
+	handle /viewer/* {
+		reverse_proxy 127.0.0.1:5994
+	}
+	handle /mobile/* {
+		reverse_proxy 127.0.0.1:5992
+	}
+	handle /ecg/* {
+		reverse_proxy 127.0.0.1:7771
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}
+
+# Kalau domain publik dipakai, ganti blok di atas menjadi:
+# ris.contoh.co.id {
+#     ... isi handle yang sama ...
+# }
+
+# ---- License Manager (opt-in) ----
+# Aplikasi lisensi memakai path absolut (/api/*, /js/*, /css/*), jadi TIDAK bisa ditempel di
+# sub-path seperti /adminVEXA. Kalau perlu diakses dari browser tanpa SSH tunnel, pakai host
+# atau port sendiri, mis. buat file /etc/caddy/conf.d/licmanager.caddy:
+#
+# licmanager.contoh.co.id {
+#     reverse_proxy 127.0.0.1:8898
+# }
+#
+# Tanpa itu, akses dari PC Anda cukup:
+#   ssh -L 8898:127.0.0.1:8898 user@IP-SERVER   -> buka http://localhost:8898

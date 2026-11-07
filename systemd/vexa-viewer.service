@@ -1,0 +1,26 @@
+# VEXAPACS-RIS di CachyOS/Arch (systemd). Pasang ke /etc/systemd/system/.
+# Environment bersama ada di /etc/vexapacs/vexa.env (chmod 600, berisi kredensial + lisensi).
+[Unit]
+Description=VEXAPACS Desktop Viewer ini yang 5994 (SSR server + dist viewer)
+Documentation=file:/opt/vexapacs/docs/LINUX-INSTALL.md
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=vexa
+Group=vexa
+WorkingDirectory=/opt/vexapacs/DESKTOP VIEWER SSR
+EnvironmentFile=-/etc/vexapacs/vexa.env
+Environment=NODE_ENV=production
+Environment=VIEWER_DIST_DIR=/opt/vexapacs/DESKTOP VIEWER/dist
+Environment=PORT=5994
+ExecStart=/usr/bin/node server/index.mjs
+Restart=on-failure
+RestartSec=3
+# Log terpisah per service supaya bisa dibaca dari admin web / journalctl
+StandardOutput=append:/var/log/vexapacs/viewer.out.log
+StandardError=append:/var/log/vexapacs/viewer.err.log
+
+[Install]
+WantedBy=multi-user.target
