@@ -288,3 +288,39 @@ cd /opt/vexacool && docker compose -f docker-compose.coolify.yml logs -f --tail=
 - [ ] Scheduled Task backup ada dan satu run manual sukses
 - [ ] `/data/vexa` berada di disk data (bukan disk sistem)
 - [ ] Keputusan lisensi sudah diambil (§8.3)
+
+---
+
+## 14. Jebakan yang sudah terbukti pada deploy pertama (jangan diulang)
+
+Semua ini sudah diperbaiki di repo. Kalau kamu mengubah Dockerfile/compose, cek lagi daftar ini.
+
+| Gejala | Sebab | Perbaikan yang dipakai |
+| --- | --- | --- |
+| Build gagal: `failed to process "apps/ECG`: unexpected end of statement` | BuildKit tidak mendukung tanda kutip di `COPY` shell-form untuk path berspasi | pakai bentuk JSON: `COPY ["apps/ECG VIEWER/package.json", "./"]` |
+| `desktop-viewer` gagal: `Could not resolve "../tools/runtime/cacheStore.mjs"` | `vite.config.ts` mengimpor `tools/` dari root repo, build stage tidak menyalinnya | `COPY ["tools", "/app/tools"]` + `COPY ["scripts", "/app/scripts"]` di stage build |
+| `mobile-viewer` build menggantung setelah "✓ built in Xs" | `vite build` tidak keluar (mprApi.mjs membuka handle) | `timeout --signal=KILL 240 npx vite build` + cek `dist/index.html` |
+| `pacs` restart loop: `version 'GLIBCXX_3.4.32' not found (dcmtk.node)` | prebuilt `dicom-dimse-native` dibangun di toolchain lebih baru dari bookworm | `npm rebuild dicom-dimse-native --build-from-source` |
+| `pacs` 500: `relation "pacs_studies" does not exist` | tabel dibuat hanya di jalur sync, bukan saat query; DB baru masih kosong | `entrypoint.cjs` memanggil `ensurePacsMetadataTables()` sebelum `build/app.js` |
+| PACS 500: `database "velopacs_db" does not exist` | `/docker-entrypoint-initdb.d` hanya jalan saat volume postgres masih kosong | service `db-init` (idempotent, `createdb` kalau belum ada) |
+| Port 5757 tertutup walau `ports:` ada | DIMSE SCP membaca `PACS/config/default.json` (127.0.0.1:8890), bukan env `DIMSE_*` | `NODE_CONFIG` menimpa `source.ip=0.0.0.0`, `source.port=5757`, `storagePath=/data/dicom` |
+| C-STORE ditolak `0xA700` / association rejected | PACS dikonfigurasi Implicit VR LE, klien meminta Explicit VR; dan kompresi J2K saat simpan bisa gagal | kirim dengan Implicit VR LE; `dimseStorageCompression=false` untuk simpan apa adanya |
+| `mwl-scp` restart loop: `IndexError: 3` | skrip memakai `Path(__file__).parents[3]`, jadi wajib ada di `<root>/RIS/backend/mwl_scp/` | layout image `/app/RIS/backend/mwl_scp` + `/app/scripts` |
+| MWL menemukan 0 order padahal ada | `RIS_BACKEND_ROOT` default `http://127.0.0.1:3001` (container sendiri) | set `RIS_BACKEND_ROOT=http://ris-api:3001` |
+| Data DICOM tidak ada di `/data/vexa/dicom` | `${VEXA_DATA_ROOT}` tidak diinterpolasi Coolify di `volumes:` → jadi named volume | path absolut `/data/vexa/...` di compose |
+
+### Cara memverifikasi cepat setelah deploy
+
+```bash
+B=http://<IP-VM>:8088
+curl -s -o /dev/null -w 'root:%{http_code}\n'      $B/
+curl -s -o /dev/null -w 'api:%{http_code}\n'       $B/api/system/health
+curl -s -H 'Accept: application/dicom+json' "$B/rs/studies?limit=5"
+
+# jalur modalitas (butuh pynetdicom/dcmtk di mesin uji)
+python dcm_probe.py     # C-ECHO 5757 + C-FIND 5656
+python dcm_store.py     # C-STORE satu gambar uji, lalu cek QIDO
+```
+
+Hasil yang dianggap lulus: C-ECHO `0x0000`, C-FIND selesai tanpa error, C-STORE `0x0000`,
+dan studi uji muncul di `/rs/studies` dalam ± 1–5 menit (indeks metadata TTL 60 s).
