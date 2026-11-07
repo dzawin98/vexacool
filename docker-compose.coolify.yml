@@ -176,6 +176,10 @@ services:
     environment:
       # Coolify mengisi nilai ini saat domain di-assign
       - SERVICE_FQDN_RISWEB_80
+    # Port host -> akses langsung lewat IP tanpa domain/Traefik:
+    #   http://<IP-VM>:8088/
+    ports:
+      - "${RIS_WEB_PORT:-8088}:80"
     expose: ["80"]
     depends_on:
       ris-api: { condition: service_started }
