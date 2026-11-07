@@ -33,6 +33,7 @@ RUN pip install --no-cache-dir -r requirements-mwl.txt imagecodecs
 WORKDIR /app
 COPY apps/PACS ./PACS
 COPY scripts ./scripts
+COPY deploy/docker/pacs-entrypoint.cjs ./PACS/entrypoint.cjs
 
 WORKDIR /app/PACS
 RUN npm run build
@@ -43,4 +44,4 @@ ENV NODE_ENV=production \
 
 EXPOSE 5001 5757
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "build/app.js"]
+CMD ["node", "entrypoint.cjs"]
